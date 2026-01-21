@@ -1,9 +1,11 @@
-import * as FileSystem from 'expo-file-system';
+// FIX: Import from 'legacy' to satisfy Expo SDK 52+ requirements
+import * as FileSystem from 'expo-file-system/legacy';
 
 // 5MB Chunks
 export const CHUNK_SIZE = 5 * 1024 * 1024;
 
 export const getFileStats = async (uri: string) => {
+    // Now calls the legacy version which still works perfectly
     const info = await FileSystem.getInfoAsync(uri);
 
     if (!info.exists) {
@@ -24,7 +26,7 @@ export const readChunk = async (
 ): Promise<string> => {
     const start = chunkIndex * CHUNK_SIZE;
 
-    // We calculate length based on chunk size
+    // Now calls the legacy version
     return await FileSystem.readAsStringAsync(uri, {
         encoding: 'base64',
         position: start,

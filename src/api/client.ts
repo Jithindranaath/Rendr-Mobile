@@ -1,48 +1,46 @@
-import { supabase } from '../lib/supabase';
-import { API_BASE_URL } from '../config/constants';
+// src/api/client.ts
 
-interface ApiOptions extends RequestInit {
-    authenticated?: boolean; // Default true
-}
+// =====================================================================
+// PASTE YOUR GOOGLE SCRIPT URL HERE
+// It should look like: https://script.google.com/macros/s/.../exec
+// =====================================================================
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzAUYYVg3E2vQJ04K1dIVOJ1m0KCTz0tRNrtxMQBKOdaDC3XQb-kSYokaY0wK45hT59NA/exec";
 
 export const apiClient = {
-    async fetch<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
-        const { authenticated = true, headers: customHeaders, ...rest } = options;
+    fetch: async <T>(endpoint: string, options: any = {}): Promise<T> => {
 
-        // Prepare headers
-        const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-            ...(customHeaders || {}),
-        };
+        // 1. INTERCEPT "INIT" REQUESTS
+        // When the app says "I want to start an upload", we redirect that request
+        // to your Google Apps Script.
+        if (endpoint.includes('/uploads/init')) {
+            console.log(`[Client] Connecting to Google Script: ${BACKEND_URL}`);
 
-        if (authenticated) {
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-            if (token) {
-                (headers as any)['Authorization'] = `Bearer ${token}`;
-            }
-        }
-
-        const url = `${API_BASE_URL}${endpoint}`;
-
-        try {
-            const response = await fetch(url, {
-                ...rest,
-                headers,
+            const response = await fetch(BACKEND_URL, {
+                method: 'POST',
+                // Pass the Project Name, Email, and Filename exactly as the Manager sends them
+                body: options.body
             });
 
-            if (!response.ok) {
-                // Create a custom error or just throw
-                const errorBody = await response.text();
-                throw new Error(`API Error ${response.status}: ${errorBody || response.statusText}`);
-            }
-
-            // Check if response has content
             const text = await response.text();
-            return (text ? JSON.parse(text) : {}) as T;
-        } catch (error) {
-            console.error('API request failed:', error);
-            throw error;
+
+            // Safety check: Did Google return an error?
+            try {
+                const json = JSON.parse(text);
+                if (json.error) throw new Error(json.error);
+                return json as T; // Returns { uploadId: "...", url: "..." }
+            } catch (e) {
+                console.error("Script Error:", text);
+                throw new Error("Failed to parse Google Script response");
+            }
         }
+
+        // 2. INTERCEPT "COMPLETE" REQUESTS
+        // We just acknowledge it locally because Google Drive saves the file automatically.
+        if (endpoint.includes('/complete')) {
+            return { success: true } as unknown as T;
+        }
+
+        // Default Fallback
+        return {} as T;
     }
 };
